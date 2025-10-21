@@ -1,31 +1,37 @@
 #!/bin/bash
 
 # Script to start the Kai system
-# This script will start the Kai services using docker-compose
+# This script will start the Kai services using Docker run commands directly
 
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # Default values
-KAI_DIR="$HOME/cotandem"
+KAI_BASE_DIR="$HOME/KaiBase"
+CODE_SERVER_PASSWORD="kai-dev"
 
 # Function to display usage
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -d, --kai-dir DIR       Kai directory (default: $HOME/cotandem)"
+    echo "  -b, --base-dir DIR      Base directory for Kai projects (default: $KAI_BASE_DIR)"
+    echo "  -p, --password         Password for code-server (default: $CODE_SERVER_PASSWORD)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                      # Start Kai with default settings"
-    echo "  $0 --kai-dir /opt/kai   # Start Kai from /opt/kai"
+    echo "  $0 --base-dir /data/kai-base   # Start with custom base directory"
     exit 1
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--kai-dir)
-            KAI_DIR="$2"
+        -b|--base-dir)
+            KAI_BASE_DIR="$2"
+            shift 2
+            ;;
+        -p|--password)
+            CODE_SERVER_PASSWORD="$2"
             shift 2
             ;;
         -h|--help)
@@ -39,7 +45,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Starting Kai system..."
-echo "Kai directory: $KAI_DIR"
+echo "Base directory: $KAI_BASE_DIR"
 echo ""
 
 # Function to check prerequisites
@@ -52,27 +58,15 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check if docker-compose is installed
-    if ! command -v docker-compose &> /dev/null && ! command -v docker compose &> /dev/null; then
-        echo "Error: docker-compose is not installed" >&2
-        exit 1
-    fi
-
     # Check if docker daemon is running
     if ! docker info &> /dev/null; then
         echo "Error: Docker daemon is not running. Please start Docker Desktop or Docker service." >&2
         exit 1
     fi
 
-    # Check if Kai directory exists
-    if [ ! -d "$KAI_DIR" ]; then
-        echo "Error: Kai directory does not exist: $KAI_DIR" >&2
-        exit 1
-    fi
-
-    # Check if docker-compose.yml exists in Kai directory
-    if [ ! -f "$KAI_DIR/docker-compose.yml" ]; then
-        echo "Error: docker-compose.yml not found in Kai directory: $KAI_DIR" >&2
+    # Check if required images exist
+    if ! docker images | grep -q "cotandem-backend\|cotandem-frontend\|flexy-dev-sandbox"; then
+        echo "Error: Required images not found. Please run setup script first to pull images from GHCR." >&2
         exit 1
     fi
 
@@ -84,21 +78,55 @@ check_prerequisites() {
 start_kai_services() {
     echo "Starting Kai services..."
     
-    cd "$KAI_DIR"
-    
-    # Check if services are already running
-    if docker-compose ps | grep -q "Up"; then
-        echo "Warning: Some Kai services appear to be already running."
-        read -p "Do you want to continue and restart them? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Operation cancelled."
-            exit 0
+    # Stop existing containers if they're running
+    for container in kai-backend kai-frontend kai-code-server; do
+        if [ "$(docker ps -q -f name=$container)" ]; then
+            echo "Stopping existing $container container..."
+            docker stop $container
         fi
-    fi
+        
+        # Remove container if it exists but is stopped
+        if [ "$(docker ps -a -q -f name=$container)" ]; then
+            echo "Removing existing $container container..."
+            docker rm $container
+        fi
+    done
     
-    # Start the services
-    docker-compose up -d
+    # Start backend service
+    echo "Starting backend service..."
+    docker run -d \
+        --name kai-backend \
+        --network kai-net \
+        --privileged \
+        -p 9900:9900 \
+        -e NODE_ENV=production \
+        -e PORT=9900 \
+        -e DOCKER_NETWORK=kai-net \
+        -e IMAGE_NAME=flexy-dev-sandbox:latest \
+        -e KAI_BASE_ROOT=${KAI_BASE_DIR} \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v ${KAI_BASE_ROOT}:/base-root \
+        cotandem-backend:latest
+    
+    # Start code-server service
+    echo "Starting code-server service..."
+    docker run -d \
+        --name kai-code-server \
+        --network kai-net \
+        -p 8443:8080 \
+        -e PASSWORD=${CODE_SERVER_PASSWORD} \
+        -v ${KAI_BASE_ROOT}:/base-root \
+        codercom/code-server:latest
+    
+    # Start frontend service
+    echo "Starting frontend service..."
+    docker run -d \
+        --name kai-frontend \
+        --network kai-net \
+        -p 9901:80 \
+        -e VITE_API_BASE_URL=http://localhost:9900 \
+        -e VITE_APP_ENV=production \
+        cotandem-frontend:latest
     
     echo "Kai services started successfully."
     echo ""
@@ -107,8 +135,6 @@ start_kai_services() {
 # Function to wait for services to be ready
 wait_for_services() {
     echo "Waiting for services to be ready..."
-    
-    cd "$KAI_DIR"
     
     # Wait for backend to be ready
     echo -n "Waiting for backend (port 9900)..."
@@ -136,8 +162,7 @@ show_status() {
     echo "Kai services status:"
     echo "===================="
     
-    cd "$KAI_DIR"
-    docker-compose ps
+    docker ps --filter name=kai- --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
     
     echo ""
     echo "Access the system at:"
@@ -145,7 +170,7 @@ show_status() {
     echo "  Backend:  http://localhost:9900"
     echo "  Code Server: http://localhost:8443"
     echo ""
-    echo "To view logs, run: cd $KAI_DIR && docker-compose logs -f"
+    echo "To view logs, run: docker logs <container-name> or docker logs -f <container-name>"
 }
 
 # Main execution
@@ -163,10 +188,12 @@ main() {
     echo "Kai system started successfully!"
     echo ""
     echo "To stop the system, run:"
-    echo "  $0 stop-kai.sh --kai-dir $KAI_DIR"
+    echo "  ./stop-kai.sh"
     echo ""
     echo "To view logs, run:"
-    echo "  cd $KAI_DIR && docker-compose logs -f"
+    echo "  docker logs kai-backend -f"
+    echo "  docker logs kai-frontend -f"
+    echo "  docker logs kai-code-server -f"
 }
 
 # Run main function

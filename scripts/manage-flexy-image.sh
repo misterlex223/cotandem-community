@@ -6,11 +6,10 @@
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # Default values
-KAI_DIR="$HOME/cotandem"
-FLEXY_DIR="$KAI_DIR/Flexy"
 IMAGE_NAME="flexy-dev-sandbox"
 IMAGE_TAG="latest"
 REGISTRY="docker.io"  # Default to Docker Hub
+GITHUB_USER="misterlex223"
 
 # Function to display usage
 usage() {
@@ -25,11 +24,10 @@ usage() {
     echo "  clean [OPTIONS]         Clean up old Flexy images"
     echo ""
     echo "Options:"
-    echo "  -d, --kai-dir DIR       Kai directory (default: $HOME/cotandem)"
     echo "  -n, --name NAME         Image name (default: $IMAGE_NAME)"
     echo "  -t, --tag TAG           Image tag (default: $IMAGE_TAG)"
     echo "  -r, --registry REG      Registry (default: $REGISTRY)"
-    echo "  -u, --username USER     Registry username"
+    echo "  -u, --user USER         GitHub username for GHCR (default: $GITHUB_USER)"
     echo "  --no-cache              Build without cache"
     echo "  -h, --help              Show this help message"
     echo ""
@@ -39,6 +37,7 @@ usage() {
     echo "  $0 push -u myuser                         # Push Flexy image to Docker Hub"
     echo "  $0 push -u myuser -r ghcr.io              # Push Flexy image to GitHub Container Registry"
     echo "  $0 pull -u myuser -r ghcr.io              # Pull Flexy image from GitHub Container Registry"
+    echo "  $0 pull -u myuser                         # Pull Flexy image from Docker Hub"
     exit 1
 }
 
@@ -55,11 +54,6 @@ USERNAME=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--kai-dir)
-            KAI_DIR="$2"
-            FLEXY_DIR="$KAI_DIR/Flexy"
-            shift 2
-            ;;
         -n|--name)
             IMAGE_NAME="$2"
             shift 2
@@ -72,7 +66,7 @@ while [[ $# -gt 0 ]]; do
             REGISTRY="$2"
             shift 2
             ;;
-        -u|--username)
+        -u|--user)
             USERNAME="$2"
             shift 2
             ;;
@@ -91,8 +85,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Executing command: $COMMAND for Flexy image..."
-echo "Kai directory: $KAI_DIR"
-echo "Flexy directory: $FLEXY_DIR"
 echo "Image name: $IMAGE_NAME"
 echo "Image tag: $IMAGE_TAG"
 echo "Registry: $REGISTRY"
@@ -117,22 +109,18 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check if Kai directory exists
-    if [ ! -d "$KAI_DIR" ]; then
-        echo "Error: Kai directory does not exist: $KAI_DIR" >&2
-        exit 1
-    fi
+    # For building, check if Flexy directory exists in current directory
+    if [ "$COMMAND" = "build" ]; then
+        if [ ! -d "Flexy" ]; then
+            echo "Error: Flexy directory does not exist in current directory" >&2
+            exit 1
+        fi
 
-    # Check if Flexy directory exists
-    if [ ! -d "$FLEXY_DIR" ]; then
-        echo "Error: Flexy directory does not exist: $FLEXY_DIR" >&2
-        exit 1
-    fi
-
-    # Check if Dockerfile exists in Flexy directory
-    if [ ! -f "$FLEXY_DIR/Dockerfile" ]; then
-        echo "Error: Dockerfile not found in Flexy directory: $FLEXY_DIR" >&2
-        exit 1
+        # Check if Dockerfile exists in Flexy directory
+        if [ ! -f "Flexy/Dockerfile" ]; then
+            echo "Error: Dockerfile not found in Flexy directory" >&2
+            exit 1
+        fi
     fi
 
     echo "Prerequisites check passed."
@@ -143,7 +131,7 @@ check_prerequisites() {
 build_flexy_image() {
     echo "Building Flexy sandbox image..."
     
-    cd "$FLEXY_DIR"
+    cd "Flexy"
     
     # Construct the build command
     BUILD_CMD="docker build"
@@ -235,19 +223,36 @@ pull_flexy_image() {
         if [ -n "$USERNAME" ]; then
             full_image_name="$REGISTRY/$USERNAME/$IMAGE_NAME:$IMAGE_TAG"
         else
-            echo "Error: Username is required for non-Docker Hub registries" >&2
-            exit 1
+            full_image_name="$REGISTRY/$GITHUB_USER/$IMAGE_NAME:$IMAGE_TAG"
         fi
     fi
     
-    # Pull the image
-    docker pull "$full_image_name"
+    # For GHCR, we need to pull from the specific GHCR path
+    if [ "$REGISTRY" = "ghcr.io" ]; then
+        if [ -n "$USERNAME" ]; then
+            ghcr_image_name="ghcr.io/$USERNAME/$IMAGE_NAME:$IMAGE_TAG"
+        else
+            ghcr_image_name="ghcr.io/$GITHUB_USER/$IMAGE_NAME:$IMAGE_TAG"
+        fi
+        
+        # Login to GitHub Container Registry (if not already logged in)
+        if ! docker info 2>/dev/null | grep -q "ghcr.io" && ! (docker system info 2>/dev/null | grep -q "ghcr.io"); then
+            echo "Please log in to GitHub Container Registry:"
+            echo "  docker login ghcr.io"
+            echo "This step is required to pull images from GHCR."
+            read -p "Press Enter to continue after logging in..."
+        fi
+        
+        docker pull "$ghcr_image_name"
+        docker tag "$ghcr_image_name" "$IMAGE_NAME:$IMAGE_TAG"
+        full_image_name="$ghcr_image_name"
+    else
+        # Pull the image from the regular registry
+        docker pull "$full_image_name"
+        docker tag "$full_image_name" "$IMAGE_NAME:$IMAGE_TAG"
+    fi
     
     echo "Flexy sandbox image pulled successfully from $full_image_name"
-    
-    # Tag it locally for Kai to use
-    docker tag "$full_image_name" "$IMAGE_NAME:$IMAGE_TAG"
-    
     echo "Image tagged locally as $IMAGE_NAME:$IMAGE_TAG"
     echo ""
 }
@@ -256,32 +261,32 @@ pull_flexy_image() {
 list_tags() {
     echo "Listing available tags for $IMAGE_NAME..."
     
+    local repo_name="$IMAGE_NAME"
     if [ -n "$USERNAME" ]; then
-        REPO_NAME="$USERNAME/$IMAGE_NAME"
-    else
-        REPO_NAME="$IMAGE_NAME"
+        repo_name="$USERNAME/$IMAGE_NAME"
     fi
     
     # For Docker Hub
     if [ "$REGISTRY" = "docker.io" ]; then
         if command -v curl &> /dev/null; then
-            echo "Available tags for $REPO_NAME on Docker Hub:"
-            curl -s "https://registry.hub.docker.com/v2/repositories/$REPO_NAME/tags/" | python3 -m json.tool | grep -o '"name":"[^"]*"' | sed 's/"name":"//' | sed 's/"$//' | head -20
+            echo "Available tags for $repo_name on Docker Hub:"
+            curl -s "https://registry.hub.docker.com/v2/repositories/$repo_name/tags/" | python3 -m json.tool | grep -o '"name":"[^"]*"' | sed 's/"name":"//' | sed 's/"$//' | head -20
         else
             echo "curl command not found. Please install curl to list Docker Hub tags."
         fi
     # For GitHub Container Registry
     elif [ "$REGISTRY" = "ghcr.io" ]; then
+        local user_name="$GITHUB_USER"
         if [ -n "$USERNAME" ]; then
-            if command -v curl &> /dev/null; then
-                echo "Available tags for $REPO_NAME on GitHub Container Registry:"
-                # This requires GitHub authentication for private repos
-                echo "Please visit: https://github.com/users/$USERNAME/packages/container/package/$IMAGE_NAME"
-            else
-                echo "curl command not found. Please install curl to list GHCR tags."
-            fi
+            user_name="$USERNAME"
+        fi
+        
+        if command -v curl &> /dev/null; then
+            echo "Available tags for $repo_name on GitHub Container Registry:"
+            # Using GitHub API to list packages
+            curl -s -H "Accept: application/vnd.github.v3+json" "https://api.github.com/users/$user_name/packages?package_type=container" | python3 -m json.tool | grep -o '"name":"[^"]*"' | sed 's/"name":"//' | sed 's/"$//' | grep "^$IMAGE_NAME" | head -20
         else
-            echo "Username required for GitHub Container Registry."
+            echo "curl command not found. Please install curl to list GHCR tags."
         fi
     else
         echo "Listing tags for other registries not implemented. Please check the registry's UI."

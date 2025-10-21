@@ -1,36 +1,41 @@
 #!/bin/bash
 
 # Script to update the Kai system
-# This script will update the Kai code, pull latest images, and optionally restart services
+# This script will update the Kai code, pull latest images from GHCR, and optionally restart services
 
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # Default values
-KAI_DIR="$HOME/cotandem"
+GITHUB_USER="misterlex223"
 STOP_ON_UPDATE=true
 START_AFTER_UPDATE=true
+
+# GitHub Container Registry image names
+BACKEND_IMAGE_NAME="cotandem-backend"
+FRONTEND_IMAGE_NAME="cotandem-frontend"
+FLEXY_IMAGE_NAME="flexy-dev-sandbox"
 
 # Function to display usage
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -d, --kai-dir DIR       Kai directory (default: $HOME/cotandem)"
+    echo "  -u, --user USER         GitHub username (default: $GITHUB_USER)"
     echo "  --no-stop               Don't stop services before updating (default: services are stopped)"
     echo "  --no-start              Don't start services after updating (default: services are started)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                      # Update Kai with default settings"
-    echo "  $0 --kai-dir /opt/kai   # Update Kai from /opt/kai"
-    echo "  $0 --no-stop --no-start # Update code only, don't manage services"
+    echo "  $0 --user myuser        # Update with custom GitHub user"
+    echo "  $0 --no-stop --no-start # Update images only, don't manage services"
     exit 1
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--kai-dir)
-            KAI_DIR="$2"
+        -u|--user)
+            GITHUB_USER="$2"
             shift 2
             ;;
         --no-stop)
@@ -52,7 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Updating Kai system..."
-echo "Kai directory: $KAI_DIR"
+echo "GitHub user: $GITHUB_USER"
 echo "Stop services during update: $STOP_ON_UPDATE"
 echo "Start services after update: $START_AFTER_UPDATE"
 echo ""
@@ -73,27 +78,9 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check if docker-compose is installed
-    if ! command -v docker-compose &> /dev/null && ! command -v docker compose &> /dev/null; then
-        echo "Error: docker-compose is not installed" >&2
-        exit 1
-    fi
-
     # Check if docker daemon is running
     if ! docker info &> /dev/null; then
         echo "Error: Docker daemon is not running. Please start Docker Desktop or Docker service." >&2
-        exit 1
-    fi
-
-    # Check if Kai directory exists
-    if [ ! -d "$KAI_DIR" ]; then
-        echo "Error: Kai directory does not exist: $KAI_DIR" >&2
-        exit 1
-    fi
-
-    # Check if docker-compose.yml exists in Kai directory
-    if [ ! -f "$KAI_DIR/docker-compose.yml" ]; then
-        echo "Error: docker-compose.yml not found in Kai directory: $KAI_DIR" >&2
         exit 1
     fi
 
@@ -101,44 +88,34 @@ check_prerequisites() {
     echo ""
 }
 
-# Function to backup current version (optional)
-create_backup() {
-    echo "Creating backup of current version..."
+# Function to pull latest service images from GHCR
+pull_latest_images() {
+    echo "Pulling latest service images from GitHub Container Registry..."
     
-    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-    BACKUP_DIR="$KAI_DIR/backup_$TIMESTAMP"
-    
-    # Only backup key configuration files, not the entire directory
-    mkdir -p "$BACKUP_DIR"
-    
-    if [ -f "$KAI_DIR/docker-compose.yml" ]; then
-        cp "$KAI_DIR/docker-compose.yml" "$BACKUP_DIR/"
+    # Login to GitHub Container Registry (if not already logged in)
+    if ! docker info 2>/dev/null | grep -q "ghcr.io" && ! (docker system info 2>/dev/null | grep -q "ghcr.io"); then
+        echo "Please log in to GitHub Container Registry:"
+        echo "  docker login ghcr.io"
+        echo "This step is required to pull images from GHCR."
+        read -p "Press Enter to continue after logging in..."
     fi
     
-    if [ -d "$KAI_DIR/backend" ] && [ -f "$KAI_DIR/backend/.env.local" ]; then
-        cp "$KAI_DIR/backend/.env.local" "$BACKUP_DIR/"
-    fi
+    # Pull backend image
+    echo "Pulling backend image..."
+    docker pull "ghcr.io/$GITHUB_USER/$BACKEND_IMAGE_NAME:latest"
+    docker tag "ghcr.io/$GITHUB_USER/$BACKEND_IMAGE_NAME:latest" "$BACKEND_IMAGE_NAME:latest"
     
-    echo "Backup created at: $BACKUP_DIR"
-    echo ""
-}
-
-# Function to update Kai repository
-update_kai_repo() {
-    echo "Updating Kai repository..."
+    # Pull frontend image
+    echo "Pulling frontend image..."
+    docker pull "ghcr.io/$GITHUB_USER/$FRONTEND_IMAGE_NAME:latest"
+    docker tag "ghcr.io/$GITHUB_USER/$FRONTEND_IMAGE_NAME:latest" "$FRONTEND_IMAGE_NAME:latest"
     
-    cd "$KAI_DIR"
+    # Pull Flexy image
+    echo "Pulling Flexy sandbox image..."
+    docker pull "ghcr.io/$GITHUB_USER/$FLEXY_IMAGE_NAME:latest"
+    docker tag "ghcr.io/$GITHUB_USER/$FLEXY_IMAGE_NAME:latest" "$FLEXY_IMAGE_NAME:latest"
     
-    # Save current state
-    echo "Current git status:"
-    git status --short
-    
-    # Pull latest changes
-    echo "Pulling latest changes from repository..."
-    git fetch origin
-    git pull origin main
-    
-    echo "Kai repository updated."
+    echo "Latest images pulled."
     echo ""
 }
 
@@ -147,86 +124,25 @@ stop_services_for_update() {
     if [ "$STOP_ON_UPDATE" = true ]; then
         echo "Stopping Kai services for update..."
         
-        cd "$KAI_DIR"
+        # Define the container names
+        containers=("kai-backend" "kai-frontend" "kai-code-server")
         
-        # Check if services are running
-        if docker-compose ps --format "table {{.Names}}\t{{.Status}}" | grep -q "Up"; then
-            docker-compose down
-            echo "Services stopped."
-        else
-            echo "Services were not running."
-        fi
+        # Stop each container if it's running
+        for container in "${containers[@]}"; do
+            if [ "$(docker ps -q -f name=$container)" ]; then
+                echo "Stopping $container..."
+                docker stop $container
+                echo "$container stopped."
+            else
+                echo "$container is not running."
+            fi
+        done
+        
+        echo "Services stopped."
     else
         echo "Skipping service stop (as requested)."
     fi
     
-    echo ""
-}
-
-# Function to install updated dependencies
-update_dependencies() {
-    echo "Updating Kai dependencies..."
-    
-    cd "$KAI_DIR"
-    
-    # Install backend dependencies
-    if [ -d "backend" ]; then
-        cd backend
-        pnpm install
-        cd ..
-    fi
-    
-    # Install frontend dependencies
-    if [ -d "frontend" ]; then
-        cd frontend
-        pnpm install
-        cd ..
-    fi
-    
-    echo "Dependencies updated."
-    echo ""
-}
-
-# Function to rebuild Flexy sandbox image if needed
-rebuild_flexy_image() {
-    echo "Checking for Flexy sandbox image updates..."
-    
-    cd "$KAI_DIR"
-    
-    if [ -f "Flexy/Dockerfile" ]; then
-        echo "Rebuilding Flexy sandbox image..."
-        docker build -t flexy-dev-sandbox:latest ./Flexy
-        echo "Flexy sandbox image rebuilt successfully."
-    else
-        echo "Flexy/Dockerfile not found. Skipping image rebuild."
-    fi
-    
-    echo ""
-}
-
-# Function to pull latest service images
-pull_latest_images() {
-    echo "Pulling latest service images..."
-    
-    cd "$KAI_DIR"
-    
-    # Pull latest images for all services
-    docker-compose pull
-    
-    echo "Latest images pulled."
-    echo ""
-}
-
-# Function to build updated images
-build_updated_images() {
-    echo "Building updated images..."
-    
-    cd "$KAI_DIR"
-    
-    # Build updated images
-    docker-compose build
-    
-    echo "Images built."
     echo ""
 }
 
@@ -235,8 +151,8 @@ start_services_after_update() {
     if [ "$START_AFTER_UPDATE" = true ]; then
         echo "Starting Kai services after update..."
         
-        cd "$KAI_DIR"
-        docker-compose up -d
+        # Run the start command (this will use the updated images)
+        ./scripts/start-kai.sh
         
         echo "Services started."
     else
@@ -251,19 +167,14 @@ show_summary() {
     echo "Update completed!"
     echo "=================="
     
-    cd "$KAI_DIR"
-    
-    echo "Current git commit:"
-    git log -1 --oneline
-    
     if [ "$START_AFTER_UPDATE" = true ]; then
         echo ""
         echo "Running services:"
-        docker-compose ps
+        docker ps --filter name=kai- --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
     else
         echo ""
         echo "Services were not started. To start them, run:"
-        echo "  cd $KAI_DIR && docker-compose up -d"
+        echo "  ./start-kai.sh"
     fi
     
     echo ""
@@ -278,13 +189,8 @@ main() {
     echo ""
 
     check_prerequisites
-    create_backup
     stop_services_for_update
-    update_kai_repo
-    update_dependencies
     pull_latest_images
-    build_updated_images
-    rebuild_flexy_image
     start_services_after_update
     show_summary
 
@@ -296,7 +202,9 @@ main() {
     echo "  Backend:  http://localhost:9900"
     echo ""
     echo "To view logs, run:"
-    echo "  cd $KAI_DIR && docker-compose logs -f"
+    echo "  docker logs kai-backend -f"
+    echo "  docker logs kai-frontend -f"
+    echo "  docker logs kai-code-server -f"
 }
 
 # Run main function
