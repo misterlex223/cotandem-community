@@ -64,20 +64,43 @@ The GitHub Container Registry (GHCR) images are named differently from the inter
 
 ## Quick Start
 
-1. **Set up the Kai system:**
+There are two ways to get started with the Kai system:
+
+### Option 1: Full Repository Clone (Recommended)
+This approach gives you access to all scripts, documentation, and future updates:
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/misterlex223/cotandem-community.git
+   cd cotandem-community
+   ```
+
+2. **Set up the Kai system:**
    ```bash
    ./scripts/setup-kai.sh
    ```
 
-2. **Start the system:**
+3. **Start the system:**
    ```bash
    ./scripts/start-kai.sh
    ```
 
-3. **Access the system:**
-   - Frontend: http://localhost:9901
-   - Backend: http://localhost:9900
-   - Code Server: http://localhost:8443
+### Option 2: Minimal Bootstrap (Lightweight)
+If you prefer a minimal setup without cloning the full repository:
+
+1. **Download and run the bootstrap script:**
+   ```bash
+   curl -s -o bootstrap-kai.sh https://raw.githubusercontent.com/misterlex223/cotandem-community/main/bootstrap-kai.sh
+   chmod +x bootstrap-kai.sh
+   ./bootstrap-kai.sh
+   ```
+
+2. **Start the system:**
+   ```bash
+   cd $HOME/kai-scripts && ./start-kai.sh
+   ```
+
+Both approaches will set up the complete Kai system with all functionality. The bootstrap option downloads only the essential scripts, while the full repository clone includes documentation, examples, and all management scripts.
 
 ## Detailed Usage
 
@@ -85,18 +108,27 @@ The GitHub Container Registry (GHCR) images are named differently from the inter
 
 The setup script will:
 - Install necessary dependencies
-- Clone the Kai repository
 - Create the base directory for projects
 - Pull images from GitHub Container Registry
 - Create the required Docker network
 - Set up environment configuration
 
+#### Full Repository Approach:
 ```bash
 # Set up with default settings
 ./scripts/setup-kai.sh
 
 # Set up with custom GitHub user
 ./scripts/setup-kai.sh --user mygithubuser
+```
+
+#### Minimal Bootstrap Approach:
+```bash
+# The bootstrap script handles setup automatically
+./bootstrap-kai.sh
+
+# With custom directories
+./bootstrap-kai.sh --base-dir /data/kai-base --dir /opt/kai-scripts
 ```
 
 ### Starting and Stopping the System
@@ -235,6 +267,24 @@ docker images | grep -E "(cotandem|flexy-dev-sandbox)"
 4. **Environment Configuration:** Review and customize the `.env.local` file in the backend directory to suit your deployment needs.
 
 5. **Backup Strategy:** Consider implementing a backup strategy for your project data stored in the base directory.
+
+## Two Ways to Use Kai Scripts
+
+This repository offers two approaches for managing your Kai system:
+
+### Full Repository Clone (Default)
+- Includes all scripts, documentation, and examples
+- Easiest to update with `git pull`
+- Best for active development and contribution
+- Scripts located in `scripts/` directory
+
+### Minimal Bootstrap (New in v2.0)
+- Lightweight setup that downloads only essential scripts
+- No git required - just download the bootstrap script
+- Perfect for production environments or minimal setups
+- Scripts located in a dedicated directory (default: `$HOME/kai-scripts`)
+
+Both approaches provide the same core functionality. Choose the full repository clone if you want complete access to all tools and documentation, or the minimal bootstrap if you prefer a lightweight setup.
 
 ## Contributing
 
