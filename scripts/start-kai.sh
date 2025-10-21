@@ -78,6 +78,9 @@ check_prerequisites() {
 start_kai_services() {
     echo "Starting Kai services..."
     
+    # Export the variable to make it available in the docker run command
+    export KAI_BASE_ROOT="$KAI_BASE_DIR"
+    
     # Stop existing containers if they're running
     for container in kai-backend kai-frontend kai-code-server; do
         if [ "$(docker ps -q -f name=$container)" ]; then
@@ -103,9 +106,9 @@ start_kai_services() {
         -e PORT=9900 \
         -e DOCKER_NETWORK=kai-net \
         -e IMAGE_NAME=flexy-dev-sandbox:latest \
-        -e KAI_BASE_ROOT=${KAI_BASE_DIR} \
+        -e KAI_BASE_ROOT="$KAI_BASE_ROOT" \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        -v ${KAI_BASE_ROOT}:/base-root \
+        -v "$KAI_BASE_ROOT:/base-root" \
         cotandem-backend:latest
     
     # Start code-server service
@@ -114,8 +117,8 @@ start_kai_services() {
         --name kai-code-server \
         --network kai-net \
         -p 8443:8080 \
-        -e PASSWORD=${CODE_SERVER_PASSWORD} \
-        -v ${KAI_BASE_ROOT}:/base-root \
+        -e PASSWORD="$CODE_SERVER_PASSWORD" \
+        -v "$KAI_BASE_ROOT:/base-root" \
         codercom/code-server:latest
     
     # Start frontend service
