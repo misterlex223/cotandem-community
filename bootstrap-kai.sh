@@ -117,9 +117,11 @@ download_scripts() {
 # Function to create base directory
 setup_base_directory() {
     echo "Setting up base directory: $KAI_BASE_DIR"
-    
+
     mkdir -p "$KAI_BASE_DIR"
+    mkdir -p "$KAI_BASE_DIR/.kai/code-server"/{config,local}
     echo "Base directory created at: $KAI_BASE_DIR"
+    echo "Code-server persistence directories created"
     echo ""
 }
 
@@ -161,6 +163,24 @@ pull_images_from_ghcr() {
     echo ""
 }
 
+# Function to pull code-server image
+setup_code_server_image() {
+    echo "Setting up code-server image with Docker CLI..."
+
+    # Try to pull from GHCR
+    echo "Attempting to pull kai-code-server from GHCR..."
+    if docker pull "ghcr.io/$GITHUB_USER/kai-code-server:latest" 2>/dev/null; then
+        docker tag "ghcr.io/$GITHUB_USER/kai-code-server:latest" "kai-code-server:latest"
+        echo "✓ Code-server image pulled from GHCR successfully."
+    else
+        echo "Could not pull kai-code-server from GHCR."
+        echo "Will use official codercom/code-server:latest image (without Docker CLI)."
+        echo "Note: To get Docker CLI support, use the full repository setup."
+    fi
+
+    echo ""
+}
+
 # Function to create environment configuration
 create_env_config() {
     echo "Creating environment configuration..."
@@ -190,6 +210,7 @@ main() {
     download_scripts
     create_docker_network
     pull_images_from_ghcr
+    setup_code_server_image
     create_env_config
 
     echo "====================================="
