@@ -95,8 +95,12 @@ start_kai_services() {
         fi
     done
     
+    # Get current user's UID and GID
+    USER_ID=$(id -u)
+    GROUP_ID=$(id -g)
+
     # Start backend service
-    echo "Starting backend service..."
+    echo "Starting backend service (as UID:GID $USER_ID:$GROUP_ID)..."
     docker run -d \
         --name kai-backend \
         --network kai-net \
@@ -107,6 +111,8 @@ start_kai_services() {
         -e DOCKER_NETWORK=kai-net \
         -e IMAGE_NAME=flexy-dev-sandbox:latest \
         -e KAI_BASE_ROOT="$KAI_BASE_ROOT" \
+        -e USER_ID="$USER_ID" \
+        -e GROUP_ID="$GROUP_ID" \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v "$KAI_BASE_ROOT:/base-root" \
         cotandem-backend:latest
@@ -124,13 +130,15 @@ start_kai_services() {
     fi
 
     # Start code-server service
-    echo "Starting code-server service..."
+    echo "Starting code-server service (as UID:GID $USER_ID:$GROUP_ID)..."
     docker run -d \
         --name kai-code-server \
         --network kai-net \
         --privileged \
         -p 8443:8080 \
         -e PASSWORD="$CODE_SERVER_PASSWORD" \
+        -e USER_ID="$USER_ID" \
+        -e GROUP_ID="$GROUP_ID" \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v "$KAI_BASE_ROOT:/base-root" \
         -v "$KAI_BASE_ROOT/.kai/code-server/config:/home/coder/.config" \
