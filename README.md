@@ -142,14 +142,22 @@ Start the system:
 ./scripts/start-kai.sh --base-dir /data/kai-base
 ```
 
-**Note:** The frontend uses runtime configuration via the `API_PUBLIC_URL` environment variable. By default, it's set to `http://localhost:9900`. If you need to customize the API URL (e.g., for reverse proxy or different network setup), you can modify the script or run the frontend container manually with a custom URL:
+**Note:** The frontend uses runtime configuration via the `API_BASE_URL` environment variable. By default, it runs in **proxy mode** (empty value), where the frontend's Nginx proxies API requests to the backend. For most use cases, including reverse proxy setups, no configuration is needed. If you need to connect to a backend on a different host, set `API_BASE_URL` to the explicit backend URL:
 
 ```bash
+# Proxy mode (default, recommended) - no configuration needed
 docker run -d \
   --name kai-frontend \
   --network kai-net \
   -p 9901:80 \
-  -e API_PUBLIC_URL=https://your-api-domain.com \
+  cotandem-frontend:latest
+
+# Direct mode - for separate backend host
+docker run -d \
+  --name kai-frontend \
+  --network kai-net \
+  -p 9901:80 \
+  -e API_BASE_URL=https://backend.yourdomain.com \
   cotandem-frontend:latest
 ```
 
@@ -225,33 +233,47 @@ The Kai frontend supports runtime configuration, allowing you to change the API 
 
 ### How It Works
 
-- The frontend uses `API_PUBLIC_URL` environment variable for runtime configuration
-- At container startup, `entrypoint.sh` generates `/usr/share/nginx/html/env-config.js` with the configured API URL
-- The frontend reads `window.API_URL` from this file at runtime
+- The frontend uses `API_BASE_URL` environment variable for runtime configuration
+- At container startup, `entrypoint.sh` generates `/usr/share/nginx/html/runtime-config.js` with the configured API URL
+- The frontend reads `window.__KAI_CONFIG__.apiBaseUrl` from this file at runtime
 
-### Default Configuration
+### Two Operation Modes
 
-By default, the frontend is configured to connect to the backend at `http://localhost:9900`.
+**1. Proxy Mode (Default, Recommended)**
+- Leave `API_BASE_URL` empty or unset
+- Frontend uses relative paths (`/api/*`)
+- Nginx in frontend container proxies requests to backend
+- Works seamlessly with reverse proxies
 
-### Custom API URL
+```bash
+# No configuration needed - this is the default
+docker run -d \
+  --name kai-frontend \
+  --network kai-net \
+  -p 9901:80 \
+  cotandem-frontend:latest
+```
 
-To use a custom API URL (e.g., when using a reverse proxy or custom domain):
+**2. Direct Mode**
+- Set `API_BASE_URL` to explicit backend URL
+- Frontend makes absolute API calls directly to backend
+- Use for testing or distributed deployments
 
 ```bash
 docker run -d \
   --name kai-frontend \
   --network kai-net \
   -p 9901:80 \
-  -e API_PUBLIC_URL=https://api.yourdomain.com \
+  -e API_BASE_URL=https://api.yourdomain.com \
   cotandem-frontend:latest
 ```
 
 ### Use Cases
 
-1. **Reverse Proxy Setup:** Point to your reverse proxy's external URL
-2. **Custom Domain:** Use your own domain name
-3. **Different Network:** Connect to backend on a different network or host
-4. **SSL/TLS:** Use HTTPS URLs for secure connections
+1. **Behind Reverse Proxy (Recommended):** Use proxy mode (no config needed)
+2. **Separate Hosts:** Set `API_BASE_URL` to point to backend server
+3. **Testing:** Set `API_BASE_URL` to test against different backends
+4. **Custom Domain with SSL/TLS:** Use reverse proxy + proxy mode for best results
 
 ## Code-Server with Docker CLI
 
