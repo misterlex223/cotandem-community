@@ -135,7 +135,8 @@ start_kai_services() {
         -v "$KAI_BASE_ROOT:/base-root" \
         -v "$KAI_BASE_ROOT/.kai/code-server/config:/home/coder/.config" \
         -v "$KAI_BASE_ROOT/.kai/code-server/local:/home/coder/.local" \
-        "$CODE_SERVER_IMAGE"
+        "$CODE_SERVER_IMAGE" \
+        --bind-addr 0.0.0.0:8080
     
     # Start frontend service
     echo "Starting frontend service..."

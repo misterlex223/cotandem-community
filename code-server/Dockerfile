@@ -3,12 +3,12 @@ FROM codercom/code-server:latest
 
 USER root
 
-# Install Docker CLI and sudo
+# Install Docker CLI, sudo, and gosu
 RUN curl -fsSL https://get.docker.com -o get-docker.sh && \
     sh get-docker.sh && \
     rm get-docker.sh && \
     apt-get update && \
-    apt-get install -y sudo && \
+    apt-get install -y sudo gosu && \
     rm -rf /var/lib/apt/lists/*
 
 # Allow coder user to use sudo without password for docker group management
@@ -22,13 +22,13 @@ set -e\n\
 if [ -S /var/run/docker.sock ]; then\n\
   DOCKER_SOCK_GID=$(stat -c "%%g" /var/run/docker.sock)\n\
   # Update docker group GID to match socket GID\n\
-  sudo groupmod -g "$DOCKER_SOCK_GID" docker 2>/dev/null || true\n\
+  groupmod -g "$DOCKER_SOCK_GID" docker 2>/dev/null || true\n\
   # Add coder user to docker group\n\
-  sudo usermod -aG docker coder 2>/dev/null || true\n\
+  usermod -aG docker coder 2>/dev/null || true\n\
 fi\n\
 \n\
-# Execute the original entrypoint with all arguments\n\
-exec /usr/bin/entrypoint.sh "$@"\n' > /usr/local/bin/docker-entrypoint.sh && \
+# Switch to coder user and execute the original entrypoint\n\
+exec gosu coder /usr/bin/entrypoint.sh "$@"\n' > /usr/local/bin/docker-entrypoint.sh && \
     chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Use custom entrypoint
