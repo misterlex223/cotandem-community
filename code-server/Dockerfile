@@ -21,10 +21,16 @@ set -e\n\
 # Get the GID of the docker socket if it exists\n\
 if [ -S /var/run/docker.sock ]; then\n\
   DOCKER_SOCK_GID=$(stat -c "%%g" /var/run/docker.sock)\n\
-  # Update docker group GID to match socket GID\n\
-  groupmod -g "$DOCKER_SOCK_GID" docker 2>/dev/null || true\n\
-  # Add coder user to docker group\n\
-  usermod -aG docker coder 2>/dev/null || true\n\
+  \n\
+  # Special handling for GID 0 (root) - common in OrbStack/macOS\n\
+  if [ "$DOCKER_SOCK_GID" = "0" ]; then\n\
+    # Add coder to root group for socket access\n\
+    usermod -aG root coder 2>/dev/null || true\n\
+  else\n\
+    # For non-root GID, update docker group to match\n\
+    groupmod -g "$DOCKER_SOCK_GID" docker 2>/dev/null || true\n\
+    usermod -aG docker coder 2>/dev/null || true\n\
+  fi\n\
 fi\n\
 \n\
 # Switch to coder user and execute the original entrypoint\n\
