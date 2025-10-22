@@ -104,7 +104,6 @@ start_kai_services() {
     docker run -d \
         --name kai-backend \
         --network kai-net \
-        --privileged \
         -p 9900:9900 \
         -e NODE_ENV=production \
         -e PORT=9900 \
@@ -134,7 +133,6 @@ start_kai_services() {
     docker run -d \
         --name kai-code-server \
         --network kai-net \
-        --privileged \
         -p 8443:8080 \
         -e PASSWORD="$CODE_SERVER_PASSWORD" \
         -e USER_ID="$USER_ID" \
