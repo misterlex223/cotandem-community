@@ -266,13 +266,18 @@ The Kai system includes a custom code-server image with Docker CLI support, allo
 
 ### Setup
 
-The custom code-server image is automatically built during setup:
+The setup script automatically handles code-server image acquisition:
 
 ```bash
 ./scripts/setup-kai.sh
 ```
 
-This builds `kai-code-server:latest` with Docker CLI installed.
+The script will:
+1. **Try to pull from GHCR first:** Attempts to pull the pre-built `kai-code-server:latest` image
+2. **Fall back to local build:** If pull fails, builds the image locally from `code-server/Dockerfile`
+3. **Use official image:** If Dockerfile not found, uses official `codercom/code-server:latest` (without Docker CLI)
+
+This approach ensures fast setup when the image is available in GHCR, while maintaining the ability to build locally when needed.
 
 ### Using Docker from Code-Server
 

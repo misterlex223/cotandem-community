@@ -167,18 +167,28 @@ pull_images_from_ghcr() {
     echo ""
 }
 
-# Function to build custom code-server image
-build_code_server_image() {
-    echo "Building custom code-server image with Docker CLI..."
+# Function to pull or build code-server image
+setup_code_server_image() {
+    echo "Setting up code-server image with Docker CLI..."
 
-    cd "$KAI_DIR"
-
-    if [ -d "code-server" ] && [ -f "code-server/Dockerfile" ]; then
-        docker build -t kai-code-server:latest code-server
-        echo "Code-server image built successfully."
+    # Try to pull from GHCR first
+    echo "Attempting to pull kai-code-server from GHCR..."
+    if docker pull "ghcr.io/$GITHUB_USER/kai-code-server:latest" 2>/dev/null; then
+        docker tag "ghcr.io/$GITHUB_USER/kai-code-server:latest" "kai-code-server:latest"
+        echo "✓ Code-server image pulled from GHCR successfully."
     else
-        echo "Warning: code-server/Dockerfile not found. Skipping custom build."
-        echo "Will use official codercom/code-server:latest image (without Docker CLI)."
+        echo "Could not pull from GHCR, building locally..."
+
+        cd "$KAI_DIR"
+
+        if [ -d "code-server" ] && [ -f "code-server/Dockerfile" ]; then
+            echo "Building custom code-server image locally..."
+            docker build -t kai-code-server:latest code-server
+            echo "✓ Code-server image built locally."
+        else
+            echo "Warning: code-server/Dockerfile not found. Skipping custom build."
+            echo "Will use official codercom/code-server:latest image (without Docker CLI)."
+        fi
     fi
 
     echo ""
@@ -217,7 +227,7 @@ main() {
     setup_kai_repo
     create_docker_network
     pull_images_from_ghcr
-    build_code_server_image
+    setup_code_server_image
     create_env_config
 
     echo "=============================="
