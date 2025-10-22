@@ -142,6 +142,17 @@ Start the system:
 ./scripts/start-kai.sh --base-dir /data/kai-base
 ```
 
+**Note:** The frontend uses runtime configuration via the `API_PUBLIC_URL` environment variable. By default, it's set to `http://localhost:9900`. If you need to customize the API URL (e.g., for reverse proxy or different network setup), you can modify the script or run the frontend container manually with a custom URL:
+
+```bash
+docker run -d \
+  --name kai-frontend \
+  --network kai-net \
+  -p 9901:80 \
+  -e API_PUBLIC_URL=https://your-api-domain.com \
+  cotandem-frontend:latest
+```
+
 Stop the system:
 ```bash
 # Stop with default settings
@@ -207,6 +218,40 @@ Clean up old images:
 ```bash
 ./scripts/manage-flexy-image.sh clean
 ```
+
+## Runtime Configuration
+
+The Kai frontend supports runtime configuration, allowing you to change the API URL without rebuilding the Docker image.
+
+### How It Works
+
+- The frontend uses `API_PUBLIC_URL` environment variable for runtime configuration
+- At container startup, `entrypoint.sh` generates `/usr/share/nginx/html/env-config.js` with the configured API URL
+- The frontend reads `window.API_URL` from this file at runtime
+
+### Default Configuration
+
+By default, the frontend is configured to connect to the backend at `http://localhost:9900`.
+
+### Custom API URL
+
+To use a custom API URL (e.g., when using a reverse proxy or custom domain):
+
+```bash
+docker run -d \
+  --name kai-frontend \
+  --network kai-net \
+  -p 9901:80 \
+  -e API_PUBLIC_URL=https://api.yourdomain.com \
+  cotandem-frontend:latest
+```
+
+### Use Cases
+
+1. **Reverse Proxy Setup:** Point to your reverse proxy's external URL
+2. **Custom Domain:** Use your own domain name
+3. **Different Network:** Connect to backend on a different network or host
+4. **SSL/TLS:** Use HTTPS URLs for secure connections
 
 ## Troubleshooting
 

@@ -127,8 +127,7 @@ start_kai_services() {
         --name kai-frontend \
         --network kai-net \
         -p 9901:80 \
-        -e VITE_API_BASE_URL=http://localhost:9900 \
-        -e VITE_APP_ENV=production \
+        -e API_PUBLIC_URL=http://localhost:9900 \
         cotandem-frontend:latest
     
     echo "Kai services started successfully."
