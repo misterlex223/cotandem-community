@@ -253,6 +253,64 @@ docker run -d \
 3. **Different Network:** Connect to backend on a different network or host
 4. **SSL/TLS:** Use HTTPS URLs for secure connections
 
+## Code-Server with Docker CLI
+
+The Kai system includes a custom code-server image with Docker CLI support, allowing you to manage containers directly from the IDE terminal.
+
+### Features
+
+- **Docker CLI Access:** Run Docker commands from code-server terminal
+- **Container Management:** View, inspect, and manage Flexy sandboxes
+- **Persistence:** Settings and extensions persist across restarts
+- **Efficient:** Shares host Docker daemon (no duplication)
+
+### Setup
+
+The custom code-server image is automatically built during setup:
+
+```bash
+./scripts/setup-kai.sh
+```
+
+This builds `kai-code-server:latest` with Docker CLI installed.
+
+### Using Docker from Code-Server
+
+1. Access code-server at `http://localhost:8443`
+2. Open the integrated terminal
+3. Run Docker commands:
+
+```bash
+# List running containers
+docker ps
+
+# View backend logs
+docker logs kai-backend -f
+
+# Inspect a Flexy sandbox
+docker inspect flexy-your-project
+
+# Execute commands in backend container
+docker exec -it kai-backend bash
+```
+
+### Persistence
+
+Code-server settings and extensions are stored in:
+- `$KAI_BASE_ROOT/.kai/code-server/config` - Configuration files
+- `$KAI_BASE_ROOT/.kai/code-server/local` - Extensions and data
+
+These directories are automatically created by the start script.
+
+### Fallback Mode
+
+If the custom image is not built, the start script will use the official `codercom/code-server:latest` image (without Docker CLI). You'll see a warning message:
+
+```
+Warning: Using official code-server image (Docker CLI not available)
+To enable Docker CLI in code-server, run: ./scripts/setup-kai.sh
+```
+
 ## Troubleshooting
 
 ### Common Issues

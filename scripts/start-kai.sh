@@ -111,15 +111,31 @@ start_kai_services() {
         -v "$KAI_BASE_ROOT:/base-root" \
         cotandem-backend:latest
     
+    # Create code-server persistence directories
+    mkdir -p "$KAI_BASE_ROOT/.kai/code-server"/{config,local}
+
+    # Determine which code-server image to use
+    if docker images | grep -q "kai-code-server"; then
+        CODE_SERVER_IMAGE="kai-code-server:latest"
+    else
+        CODE_SERVER_IMAGE="codercom/code-server:latest"
+        echo "Warning: Using official code-server image (Docker CLI not available)"
+        echo "To enable Docker CLI in code-server, run: ./scripts/setup-kai.sh"
+    fi
+
     # Start code-server service
     echo "Starting code-server service..."
     docker run -d \
         --name kai-code-server \
         --network kai-net \
+        --privileged \
         -p 8443:8080 \
         -e PASSWORD="$CODE_SERVER_PASSWORD" \
+        -v /var/run/docker.sock:/var/run/docker.sock \
         -v "$KAI_BASE_ROOT:/base-root" \
-        codercom/code-server:latest
+        -v "$KAI_BASE_ROOT/.kai/code-server/config:/home/coder/.config" \
+        -v "$KAI_BASE_ROOT/.kai/code-server/local:/home/coder/.local" \
+        "$CODE_SERVER_IMAGE"
     
     # Start frontend service
     echo "Starting frontend service..."

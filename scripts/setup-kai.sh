@@ -167,6 +167,23 @@ pull_images_from_ghcr() {
     echo ""
 }
 
+# Function to build custom code-server image
+build_code_server_image() {
+    echo "Building custom code-server image with Docker CLI..."
+
+    cd "$KAI_DIR"
+
+    if [ -d "code-server" ] && [ -f "code-server/Dockerfile" ]; then
+        docker build -t kai-code-server:latest code-server
+        echo "Code-server image built successfully."
+    else
+        echo "Warning: code-server/Dockerfile not found. Skipping custom build."
+        echo "Will use official codercom/code-server:latest image (without Docker CLI)."
+    fi
+
+    echo ""
+}
+
 # Function to create environment configuration
 create_env_config() {
     echo "Creating environment configuration..."
@@ -200,6 +217,7 @@ main() {
     setup_kai_repo
     create_docker_network
     pull_images_from_ghcr
+    build_code_server_image
     create_env_config
 
     echo "=============================="
